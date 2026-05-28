@@ -205,16 +205,18 @@ $('document').ready(function(){
 	
 	$('#story').click(function(){
 		$(this).fadeOut('slow');
-		$('.cake').fadeOut('fast').promise().done(function(){
+		$('.balloons').fadeOut('fast');
+		$('.cake').fadeOut('fast');
+		setTimeout(function(){
 			var $paras = $('.message p');
-			$paras.hide();
-			$('.message').show();
+			$paras.css('display','none');
+			$('.message').css('display','block');
 			$paras.each(function(i, el) {
 				setTimeout(function() {
-					$(el).fadeIn(600);
-				}, i * 230);
+					$(el).fadeIn(700);
+				}, i * 420);
 			});
-		});
+		}, 600);
 	});
 });
 
