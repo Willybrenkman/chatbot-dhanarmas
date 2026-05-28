@@ -29,9 +29,36 @@ $('document').ready(function(){
 			$('#play').fadeIn('slow');
 		});
 	});
+	function startParticles() {
+		var symbols = ['✦','✧','♡','★','✿','❋','❤','✨'];
+		var colors = ['#F2B300','#0719D4','#D14D39','#8FAD00','#8377E4','#99C96A','#20CFB4','#ff69b4'];
+		setInterval(function() {
+			var $p = $('<span class="floating-particle">' + symbols[Math.floor(Math.random()*symbols.length)] + '</span>');
+			$p.css({
+				left: Math.random()*100 + 'vw',
+				color: colors[Math.floor(Math.random()*colors.length)],
+				fontSize: (10 + Math.random()*18) + 'px',
+				animationDuration: (4 + Math.random()*4) + 's',
+				animationDelay: Math.random()*0.5 + 's'
+			});
+			$('body').append($p);
+			setTimeout(function() { $p.remove(); }, 9000);
+		}, 350);
+	}
+
+	function launchConfetti() {
+		var end = Date.now() + 3500;
+		(function frame() {
+			confetti({ particleCount: 7, angle: 60, spread: 65, origin: { x: 0, y: 0.7 } });
+			confetti({ particleCount: 7, angle: 120, spread: 65, origin: { x: 1, y: 0.7 } });
+			if (Date.now() < end) requestAnimationFrame(frame);
+		}());
+	}
+
 	$('#play').click(function(){
 		var audio = $('.song')[0];
         audio.play();
+		startParticles();
         $('#bulb_yellow').addClass('bulb-glow-yellow-after');
 		$('#bulb_red').addClass('bulb-glow-red-after');
 		$('#bulb_blue').addClass('bulb-glow-blue-after');
@@ -149,6 +176,7 @@ $('document').ready(function(){
 
 		
 	$('#wish_message').click(function(){
+		launchConfetti();
 		 vw = $(window).width()/2;
 
 		$('#b1,#b2,#b3,#b4,#b5,#b6,#b7,#b8').stop();
@@ -178,31 +206,15 @@ $('document').ready(function(){
 	$('#story').click(function(){
 		$(this).fadeOut('slow');
 		$('.cake').fadeOut('fast').promise().done(function(){
-			$('.message').fadeIn('slow');
+			var $paras = $('.message p');
+			$paras.hide();
+			$('.message').show();
+			$paras.each(function(i, el) {
+				setTimeout(function() {
+					$(el).fadeIn(600);
+				}, i * 230);
+			});
 		});
-		
-		var i;
-
-		function msgLoop (i) {
-			$("p:nth-child("+i+")").fadeOut('slow').delay(800).promise().done(function(){
-			i=i+1;
-			$("p:nth-child("+i+")").fadeIn('slow').delay(1000);
-			if(i==50){
-				$("p:nth-child(49)").fadeOut('slow').promise().done(function () {
-					$('.cake').fadeIn('fast');
-				});
-				
-			}
-			else{
-				msgLoop(i);
-			}			
-
-		});
-			// body...
-		}
-		
-		msgLoop(0);
-		
 	});
 });
 
