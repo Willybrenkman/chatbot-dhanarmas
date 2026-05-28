@@ -16,11 +16,22 @@ body {
 	
 }
 .peach-after {
-	-webkit-animation:peach_alive linear 8s infinite;
-	-moz-animation:peach_alive linear 8s infinite;
-	-o-animation:peach_alive linear 8s infinite;
-	-ms-animation:peach_alive linear 8s infinite;
-	animation:peach_alive linear 8s infinite;
+	background: linear-gradient(135deg, #ff9a9e, #fecfef, #ffecd2, #a18cd1, #fbc2eb, #ff9a9e);
+	background-size: 400% 400%;
+	-webkit-animation: gradientBG 10s ease infinite;
+	-moz-animation: gradientBG 10s ease infinite;
+	-o-animation: gradientBG 10s ease infinite;
+	animation: gradientBG 10s ease infinite;
+}
+@-webkit-keyframes gradientBG {
+	0%   { background-position: 0% 50%; }
+	50%  { background-position: 100% 50%; }
+	100% { background-position: 0% 50%; }
+}
+@keyframes gradientBG {
+	0%   { background-position: 0% 50%; }
+	50%  { background-position: 100% 50%; }
+	100% { background-position: 0% 50%; }
 }
 
 @-webkit-keyframes peach_alive {
@@ -1289,13 +1300,31 @@ audio {
 	display: none;
 }
 .message p {
-	font-family: 'Signika', sans-serif;
-	font-size: 30px;
-	text-transform: uppercase;
-	color: #C4515C;
-	text-shadow: 2px 2px 2px #FFF;
+	font-family: 'Playfair Display', 'Signika', serif;
+	font-size: 28px;
+	text-transform: none;
+	letter-spacing: 1px;
+	color: #7B2D8B;
+	text-shadow: 1px 1px 4px rgba(255,255,255,0.6);
 	display: none;
-	font-weight: bold;
+	font-weight: 400;
+	font-style: italic;
+}
+.message p strong {
+	font-family: 'Playfair Display', serif;
+	font-size: 38px;
+	font-style: normal;
+	font-weight: 700;
+	color: #FFD700;
+	text-shadow: 0 0 10px #FFD700, 0 0 25px #FFA500;
+	animation: glowPulse 1.5s ease-in-out infinite alternate;
+	display: inline-block;
+	text-transform: uppercase;
+	letter-spacing: 3px;
+}
+@keyframes glowPulse {
+	from { text-shadow: 0 0 10px #FFD700, 0 0 25px #FFA500; }
+	to   { text-shadow: 0 0 20px #FFD700, 0 0 50px #FFA500, 0 0 80px #FF69B4; }
 }
 
 .btn-primary {
