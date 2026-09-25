@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konsol HRD</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --card:#fff; --tx:#1b1d22; --dim:#6b7280; --line:#e3e5ea;
+    --ok:#1a7f37; --no:#b42318; --pri:#1f6feb; --code:#f2f3f6;
+    --k:#fde8e6; --k-tx:#8a1c12; --t:#fff4e5; --t-tx:#7a4a06; --n:#eef0f4; --n-tx:#44484f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#14161a; --card:#1c1f25; --tx:#e8eaed; --dim:#9aa2ad; --line:#2c3037;
+      --code:#24272e; --k:#3a1714; --k-tx:#f5a99f; --t:#332507; --t-tx:#f0c987;
+      --n:#262a31; --n-tx:#c2c7ce;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:18px}
+  .auth{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:18px}
+  input,textarea,button{font:inherit}
+  input[type=password],input[type=text]{padding:8px 11px;border-radius:8px;
+    border:1px solid var(--line);background:var(--bg);color:var(--tx)}
+  button{padding:8px 15px;border:0;border-radius:8px;background:var(--pri);color:#fff;
+    font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;color:var(--pri);border:1px solid var(--line)}
+  button.ok{background:var(--ok)} button.no{background:var(--no)}
+  button:disabled{opacity:.5;cursor:default}
+  nav{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+  nav button{background:transparent;color:var(--dim);border-radius:0;
+    border-bottom:2px solid transparent;font-weight:500;padding:9px 13px}
+  nav button.on{color:var(--tx);border-bottom-color:var(--pri);font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:11px;
+    padding:15px;margin-bottom:13px}
+  .q{font-weight:600;margin-bottom:9px}
+  .a{background:var(--code);border-radius:9px;padding:11px;white-space:pre-wrap;
+    overflow-wrap:anywhere;font-size:14px}
+  textarea{width:100%;min-height:110px;padding:11px;border-radius:9px;
+    border:1px solid var(--line);background:var(--bg);color:var(--tx);
+    white-space:pre-wrap;resize:vertical;margin-top:9px}
+  .row{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;align-items:center}
+  .meta{font-size:12px;color:var(--dim);margin-top:8px}
+  .pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;
+    border-radius:20px;margin-right:5px}
+  .pill.kritis{background:var(--k);color:var(--k-tx)}
+  .pill.tinggi{background:var(--t);color:var(--t-tx)}
+  .pill.normal{background:var(--n);color:var(--n-tx)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px}
+  .kpi .n{font-size:25px;font-weight:700} .kpi .l{font-size:12px;color:var(--dim)}
+  .empty{color:var(--dim);padding:26px;text-align:center}
+  pre{background:var(--code);padding:12px;border-radius:9px;overflow:auto;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Konsol HRD</h1>
+  <div class="sub">Tinjau jawaban bot sebelum dikirim, dan tangani eskalasi.</div>
+
+  <div class="auth">
+    <label for="tok" style="font-size:12px;color:var(--dim)">Token HRD</label>
+    <input id="tok" type="password" placeholder="X-HRD-Token" style="flex:1;min-width:180px">
+    <input id="rev" type="text" placeholder="Nama peninjau" style="min-width:150px">
+    <button id="save">Simpan &amp; muat</button>
+  </div>
+
+  <nav>
+    <button data-tab="drafts" class="on">Draf menunggu</button>
+    <button data-tab="esc">Eskalasi</button>
+    <button data-tab="stats">Statistik</button>
+    <button data-tab="korpus">Dokumen</button>
+  </nav>
+
+  <div id="view"><div class="empty">Masukkan token HRD lalu klik “Simpan &amp; muat”.</div></div>
+</div>
+
+<script>
+const view = document.getElementById('view');
+const tokEl = document.getElementById('tok');
+const revEl = document.getElementById('rev');
+let tab = 'drafts';
+
+// Token & nama peninjau disimpan lokal supaya tidak diketik ulang tiap muat.
+// Ini kemudahan per-peninjau, bukan mekanisme keamanan.
+try {
+  tokEl.value = localStorage.getItem('hrd_tok') || '';
+  revEl.value = localStorage.getItem('hrd_rev') || '';
+} catch (e) {}
+
+function hdr() {
+  return { 'Content-Type': 'application/json', 'X-HRD-Token': tokEl.value };
+}
+function reviewer() { return revEl.value.trim() || 'hrd'; }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+async function api(path, opt) {
+  const r = await fetch(path, Object.assign({ headers: hdr() }, opt || {}));
+  if (r.status === 401) throw new Error('Token HRD tidak valid.');
+  if (!r.ok) throw new Error('Gagal memuat (HTTP ' + r.status + ').');
+  return r.json();
+}
+
+async function muat() {
+  view.innerHTML = '<div class="empty">Memuat…</div>';
+  try {
+    if (tab === 'drafts') return renderDrafts(await api('/api/hrd/drafts'));
+    if (tab === 'esc')    return renderEsc(await api('/api/hrd/escalations'));
+    if (tab === 'stats')  return renderStats(await api('/api/hrd/stats'));
+    if (tab === 'korpus') return renderKorpus(await (await fetch('/healthz')).json());
+  } catch (e) {
+    view.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+  }
+}
+
+function renderDrafts(d) {
+  const list = d.drafts || [];
+  if (!list.length) {
+    view.innerHTML = '<div class="empty">Tidak ada draf yang menunggu. 👍</div>';
+    return;
+  }
+  view.innerHTML = list.map(x => `
+    <div class="card" data-id="${x.id}">
+      <div class="q">${esc(x.question)}</div>
+      <div class="a">${esc(x.draft_answer)}</div>
+      <textarea data-edit="${x.id}" placeholder="Edit di sini kalau perlu. Kosongkan untuk mengirim draf apa adanya.">${esc(x.draft_answer)}</textarea>
+      <div class="row">
+        <button class="ok" data-act="approve" data-id="${x.id}">Setujui &amp; kirim</button>
+        <button class="no" data-act="reject" data-id="${x.id}">Tolak</button>
+        <span class="meta">draf #${x.id} · ${esc(x.created_at)}</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderEsc(d) {
+  const list = d.escalations || [];
+  if (!list.length) {
+    view.innerHTML = '<div class="empty">Tidak ada eskalasi terbuka.</div>';
+    return;
+  }
+  view.innerHTML = list.map(x => `
+    <div class="card">
+      <div><span class="pill ${esc(x.urgency)}">${esc(x.urgency)}</span>
+           <span class="meta">${esc(x.category)}</span></div>
+      <div class="q" style="margin-top:9px">${esc(x.question)}</div>
+      <div class="row">
+        <input type="text" data-note="${x.id}" placeholder="Catatan penanganan" style="flex:1;min-width:180px">
+        <button data-act="handle" data-id="${x.id}">Tandai ditangani</button>
+        <span class="meta">#${x.id} · ${esc(x.created_at)}</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderStats(s) {
+  const kpi = (n, l) => `<div class="kpi"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`;
+  view.innerHTML = `
+    <div class="grid">
+      ${kpi(s.total_pertanyaan, 'Pertanyaan masuk')}
+      ${kpi(s.persen_terjawab + '%', 'Terjawab bot')}
+      ${kpi(s.tidak_ditemukan, 'Tidak ditemukan')}
+      ${kpi(s.total_sesi, 'Sesi percakapan')}
+    </div>
+    <div class="card" style="margin-top:14px">
+      <strong>Eskalasi per kategori</strong>
+      <pre>${esc(JSON.stringify(s.eskalasi_per_kategori, null, 2))}</pre>
+      <strong>Draf per status</strong>
+      <pre>${esc(JSON.stringify(s.draf_per_status, null, 2))}</pre>
+      <strong>Token terpakai</strong>
+      <pre>${esc(JSON.stringify(s.token, null, 2))}</pre>
+      <div class="meta">Kalau <code>cache_read</code> selalu 0, ada yang membatalkan prompt cache —
+      cek apakah ada timestamp atau ID yang ikut di prefiks prompt.</div>
+    </div>`;
+}
+
+function renderKorpus(h) {
+  view.innerHTML = `
+    <div class="grid">
+      <div class="kpi"><div class="n">${esc(h.dokumen)}</div><div class="l">Dokumen dimuat</div></div>
+      <div class="kpi"><div class="n">${esc(h.perkiraan_token_korpus)}</div><div class="l">Perkiraan token</div></div>
+      <div class="kpi"><div class="n">${esc(h.answer_mode)}</div><div class="l">Mode jawaban</div></div>
+      <div class="kpi"><div class="n">${esc(h.provider)}</div><div class="l">Penyedia LLM</div></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <strong>Dokumen contoh yang masih terpasang</strong>
+      <pre>${esc(JSON.stringify(h.dokumen_contoh, null, 2))}</pre>
+      <strong>Masalah korpus</strong>
+      <pre>${esc(JSON.stringify(h.masalah_korpus, null, 2))}</pre>
+      <div class="row">
+        <button class="ghost" data-act="reload">Muat ulang dokumen</button>
+        <span class="meta">Pakai ini setelah memperbarui file di folder knowledge/.</span>
+      </div>
+    </div>`;
+}
+
+document.querySelectorAll('nav button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    tab = b.dataset.tab;
+    muat();
+  });
+});
+
+document.getElementById('save').addEventListener('click', () => {
+  try {
+    localStorage.setItem('hrd_tok', tokEl.value);
+    localStorage.setItem('hrd_rev', revEl.value);
+  } catch (e) {}
+  muat();
+});
+
+view.addEventListener('click', async (ev) => {
+  const b = ev.target.closest('button[data-act]');
+  if (!b) return;
+  const id = b.dataset.id;
+  b.disabled = true;
+  try {
+    if (b.dataset.act === 'approve') {
+      const ta = document.querySelector(`textarea[data-edit="${id}"]`);
+      const asli = document.querySelector(`.card[data-id="${id}"] .a`).textContent;
+      const edited = ta.value.trim();
+      await api(`/api/hrd/drafts/${id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reviewer: reviewer(),
+          final_answer: (edited && edited !== asli.trim()) ? edited : null
+        })
+      });
+    } else if (b.dataset.act === 'reject') {
+      const alasan = prompt('Kenapa jawaban ini ditolak? (jadi bahan perbaikan prompt & dokumen)');
+      if (!alasan) { b.disabled = false; return; }
+      await api(`/api/hrd/drafts/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reviewer: reviewer(), reject_reason: alasan })
+      });
+    } else if (b.dataset.act === 'handle') {
+      const note = document.querySelector(`input[data-note="${id}"]`);
+      await api(`/api/hrd/escalations/${id}/handle`, {
+        method: 'POST',
+        body: JSON.stringify({ handled_by: reviewer(), note: note ? note.value : null })
+      });
+    } else if (b.dataset.act === 'reload') {
+      await api('/api/hrd/reload-knowledge', { method: 'POST' });
+    }
+    muat();
+  } catch (e) {
+    alert(e.message);
+    b.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
