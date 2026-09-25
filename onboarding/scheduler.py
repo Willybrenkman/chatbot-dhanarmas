@@ -5,7 +5,7 @@ Tidak butuh integrasi HRIS. Sumber datanya satu berkas CSV yang HRD isi
 (ekspor dari Google Sheet juga bisa). Jalankan sekali sehari lewat cron:
 
     # setiap hari kerja pukul 08.10
-    10 8 * * 1-5 cd /path/hrd-chatbot && python3 onboarding/scheduler.py --jalankan
+    10 8 * * 1-5 cd /path/ke/repo && python3 onboarding/scheduler.py --jalankan
 
 Perintah:
     --impor BERKAS.csv          muat/perbarui daftar karyawan baru

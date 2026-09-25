@@ -19,7 +19,6 @@ Yang ada di sini:
 ## Jalan dalam 2 menit
 
 ```bash
-cd hrd-chatbot
 python3 -m pip install -r requirements.txt
 cp .env.example .env            # bawaan: provider mock, mode draft
 uvicorn app.main:app --reload --port 8081
@@ -273,7 +272,7 @@ Ini MVP pilot. Yang **wajib** dibereskan sebelum dipakai luas:
 ## Struktur berkas
 
 ```
-hrd-chatbot/
+.
 ├── app/
 │   ├── main.py            FastAPI, endpoint, gerbang token HRD
 │   ├── chat.py            pipa satu putaran percakapan

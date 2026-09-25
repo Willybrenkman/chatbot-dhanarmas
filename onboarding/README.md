@@ -32,7 +32,7 @@ python3 onboarding/scheduler.py --laporan
 Cron yang disarankan:
 
 ```cron
-10 8 * * 1-5 cd /path/hrd-chatbot && python3 onboarding/scheduler.py --impor onboarding/karyawan_baru.csv --jalankan --kanal whatsapp >> logs/onboarding.log 2>&1
+10 8 * * 1-5 cd /path/ke/repo && python3 onboarding/scheduler.py --impor onboarding/karyawan_baru.csv --jalankan --kanal whatsapp >> logs/onboarding.log 2>&1
 ```
 
 ## Kolom CSV
