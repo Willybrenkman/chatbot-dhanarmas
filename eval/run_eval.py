@@ -38,7 +38,10 @@ from app.config import get_settings  # noqa: E402
 from app.db import Database  # noqa: E402
 from app.providers import build_provider  # noqa: E402
 
-# Harga per 1 juta token (USD). Verifikasi ulang sebelum dipakai untuk anggaran.
+# Harga per 1 juta token (USD) untuk penyedia yang harganya diketahui di sini.
+# Verifikasi ulang sebelum dipakai untuk anggaran. Groq dan endpoint self-hosted
+# tidak dicantumkan: Groq punya tier gratis dan tarif yang berubah, self-hosted
+# biayanya berupa GPU bukan per token — jadi angkanya tidak diarang di sini.
 HARGA = {
     "claude-opus-5": (5.0, 25.0),
     "claude-sonnet-5": (2.0, 10.0),
@@ -180,10 +183,15 @@ async def main() -> int:
         print(f"Biaya jalan ini: ~${usd:.4f} (~Rp {usd * KURS_IDR:,.0f}) "
               f"untuk {total} kasus")
         print(warna("Harga per token perlu diverifikasi ulang sebelum dipakai untuk anggaran.", "dim"))
-    if provider.name == "anthropic" and s["cache_read"] == 0 and total > 1:
+    if getattr(provider, "supports_cache", False):
+        if s["cache_read"] == 0 and total > 1:
+            print(warna(
+                "cache_read = 0 padahal beberapa permintaan. Prompt cache tidak kena — "
+                "cek apakah ada isi yang berubah di prefiks prompt.", "warn"))
+    elif total > 1:
         print(warna(
-            "cache_read = 0 padahal beberapa permintaan. Prompt cache tidak kena — "
-            "cek apakah ada isi yang berubah di prefiks prompt.", "warn"))
+            "Penyedia ini tanpa prompt caching: korpus dibaca ulang seharga penuh "
+            "setiap turn, jadi cache_read wajar bernilai nol.", "dim"))
 
     if args.ambang and persen < args.ambang:
         print(warna(f"\nDI BAWAH AMBANG {args.ambang}% -> gagal", "no"))

@@ -14,7 +14,7 @@ Yang ada di sini:
 | Konsol HRD | tinjau draf, tangani eskalasi, lihat statistik & status dokumen |
 | Eval set | 49 kasus + runner, supaya perbaikan bisa diukur bukan ditebak |
 | Onboarding terjadwal | 6 pesan dalam 90 hari, tanpa integrasi HRIS (cukup CSV) |
-| Dua penyedia LLM | Claude API untuk pilot, Hermes on-prem untuk saat data tidak boleh keluar |
+| Empat penyedia LLM | mock (offline), Groq (tier gratis), Claude API, dan model self-hosted |
 
 ## Jalan dalam 2 menit
 
@@ -43,10 +43,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 ## Uji
 
 ```bash
-python3 -m pytest -q              # 82 tes
+python3 -m pytest -q              # 89 tes
 python3 eval/run_eval.py          # eval set
 LLM_PROVIDER=anthropic python3 eval/run_eval.py --ambang 85
 bash scripts/smoke.sh             # verifikasi menyeluruh
+python3 scripts/cek_provider.py   # cek kunci API & nama model penyedia
 ```
 
 ## Arsitektur
@@ -69,7 +70,7 @@ Karyawan (web / WhatsApp)
         │  8. mode: jawab / tahan sebagai draf / eskalasi
         │  9. simpan jejak audit
         ▼
-   app/providers/ ── mock | anthropic | hermes
+   app/providers/ ── mock | anthropic | groq | hermes
    app/db.py      ── sessions, messages, drafts, escalations, onboarding
 ```
 
@@ -224,7 +225,71 @@ Onboarding juga **cara termurah mulai memakai WhatsApp**: audiensnya hanya
 karyawan baru (puluhan per bulan, bukan 5000), jadi biaya template kecil.
 Kanalnya terbukti dulu di skala kecil, baru dibuka ke semua karyawan.
 
-## Memakai Hermes on-prem
+## Pilihan penyedia LLM
+
+Empat pilihan, ditukar lewat satu variabel di `.env`. Aplikasi hanya bicara ke
+antarmuka di `app/providers/base.py`, jadi tidak ada kode lain yang berubah.
+
+| `LLM_PROVIDER` | Untuk apa | Prompt caching |
+|---|---|---|
+| `mock` | uji & demo offline, tanpa API key | — |
+| `groq` | **paling murah untuk mulai** — model terbuka, ada tier gratis | tidak ada |
+| `anthropic` | kualitas kepatuhan instruksi tertinggi | ada, ttl 1 jam |
+| `hermes` | model self-hosted (vLLM), saat data tidak boleh keluar | prefix caching vLLM |
+
+`groq` dan `hermes` memakai kelas yang sama (`app/providers/openai_compatible.py`)
+karena bentuk API-nya identik — yang beda cuma base URL, nama model, dan kunci.
+
+### Groq (tier gratis)
+
+```bash
+# 1. ambil kunci gratis di https://console.groq.com/keys, taruh di .env:
+#      LLM_PROVIDER=groq
+#      GROQ_API_KEY=gsk_...
+
+# 2. cari nama model yang benar-benar tersedia untuk kuncimu
+python3 scripts/cek_provider.py --daftar-model
+
+# 3. salin salah satu id ke GROQ_MODEL di .env, lalu uji satu pertanyaan
+python3 scripts/cek_provider.py
+
+# 4. ukur kepatuhannya terhadap eval set
+LLM_PROVIDER=groq python3 eval/run_eval.py
+```
+
+Langkah 2 bukan formalitas: **nama model Groq berubah dan yang lama dihentikan**,
+jadi nilai apa pun yang tertulis di `.env.example` pasti akan basi. Skripnya
+membaca daftar dari API, bukan dari daftar yang ditulis di kode.
+
+Tiga hal yang perlu kamu tahu dengan Groq:
+
+- **Tidak ada prompt caching.** Korpus kebijakan dibaca ulang seharga penuh
+  setiap turn. Dengan korpus contoh ini (~5.000 token per permintaan) itu tidak
+  masalah, tapi jadi penting kalau dokumen kalian tumbuh besar.
+- **Batas laju tier gratis akan kena.** Pipa menanganinya sebagai kondisi normal
+  yang berlalu: karyawan diberi pesan "coba sebentar lagi" beserta perkiraan
+  jeda, dan eskalasinya berurgensi normal — tidak menyuruh menelepon HRD untuk
+  sesuatu yang selesai sendiri dalam beberapa detik.
+- **Kepatuhan instruksi lebih rapuh** daripada model komersial besar: format
+  sitasi dan sentinel `TIDAK_DITEMUKAN` lebih sering dilewatkan. Itu justru
+  alasan pemeriksaan sitasi ada — jawaban yang tidak patuh ditahan untuk
+  ditinjau manusia, bukan diteruskan ke karyawan. Jalankan eval set untuk
+  melihat seberapa sering itu terjadi pada model pilihanmu.
+
+### Cocokkan ambang korpus dengan context window model
+
+`AMBANG_TOKEN_KORPUS` di `.env` harus sesuai context window model yang dipakai,
+bukan dibiarkan di bawaan 400.000 yang hanya pas untuk model ber-context sejuta:
+
+```bash
+python3 scripts/cek_provider.py --ukur-korpus
+```
+
+Skrip itu menghitung ukuran prompt penuh dan menyebut context window minimal
+yang aman. Kalau prompt melewati context model, permintaan gagal dengan kode
+`konteks_penuh` dan pipa memberi pesan yang tepat, bukan "gangguan teknis".
+
+### Hermes / vLLM on-prem
 
 ```bash
 # di .env
@@ -234,13 +299,29 @@ HERMES_MODEL=NousResearch/Hermes-3-Llama-3.1-8B
 ```
 
 Catatan kapasitas untuk 5000 karyawan: satu GPU kelas L4 cukup untuk model 8B
-pada beban normal, tetapi beban puncak (THR, cuti bersama) bisa 3–5× dan butuh
-GPU kedua. Model 70B — yang jauh lebih andal mengikuti instruksi sitasi — butuh
+pada beban normal, tetapi beban puncak (THR, cuti bersama) bisa 3-5x dan butuh
+GPU kedua. Model 70B - yang jauh lebih andal mengikuti instruksi sitasi - butuh
 A100/H100.
 
-Pola hibrida yang disarankan: API terkelola untuk tanya-jawab kebijakan (tidak
-menyentuh PII), Hermes on-prem untuk apa pun yang membaca data pribadi
-karyawan nanti. Abstraksi provider sudah menyiapkan ini.
+Pola hibrida yang disarankan: penyedia terkelola untuk tanya-jawab kebijakan
+(tidak menyentuh PII), model on-prem untuk apa pun yang membaca data pribadi
+karyawan nanti.
+
+### Kalau penyedia gagal
+
+Kegagalan diklasifikasi, bukan diseragamkan jadi "gangguan teknis". Tiap jenis
+mendapat pesan yang tepat untuk karyawan dan urgensi eskalasi yang sesuai:
+
+| Kode | Pesan ke karyawan | Urgensi |
+|---|---|---|
+| `rate_limited` | "coba sebentar lagi" + perkiraan jeda | normal |
+| `auth` | masalah konfigurasi, sudah ditandai tim teknis | tinggi |
+| `model_tidak_ada` | sama seperti di atas | tinggi |
+| `konteks_penuh` | minta pertanyaan dipecah lebih pendek | normal |
+| `lain` | gangguan teknis, diteruskan ke HRD | tinggi |
+
+Detail teknis tidak pernah ditampilkan ke karyawan; itu hanya masuk log dan
+kategori eskalasi.
 
 ## Sebelum produksi
 
@@ -282,14 +363,16 @@ Ini MVP pilot. Yang **wajib** dibereskan sebelum dipakai luas:
 │   ├── config.py          konfigurasi dari .env
 │   ├── db.py              SQLite, skema siap pindah ke Postgres
 │   ├── models.py          skema permintaan/respons
-│   ├── providers/         mock | anthropic | hermes
+│   ├── providers/         mock | anthropic | groq | hermes
 │   └── channels/          console (latihan kering) | whatsapp
 ├── knowledge/             6 dokumen kebijakan CONTOH — ganti dengan yang resmi
 ├── static/                index.html (chat karyawan), hrd.html (konsol HRD)
 ├── eval/                  eval_set.yaml (49 kasus) + run_eval.py
 ├── onboarding/            scheduler.py, messages.yaml, contoh CSV
-├── tests/                 82 tes
-└── scripts/smoke.sh       verifikasi menyeluruh
+├── tests/                 89 tes
+└── scripts/
+    ├── smoke.sh        verifikasi menyeluruh
+    └── cek_provider.py  cek kunci API, nama model, ukuran korpus
 ```
 
 ## Yang belum dikerjakan

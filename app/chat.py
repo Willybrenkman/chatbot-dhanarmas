@@ -32,7 +32,7 @@ from .prompts import (
     build_stable_block,
     build_volatile_block,
 )
-from .providers import LLMProvider
+from .providers import LLMProvider, ProviderError
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,41 @@ PESAN_TIDAK_DITEMUKAN = (
     "jadi aku tidak mau menebak.\n\nPertanyaanmu sudah aku teruskan ke HRD "
     "supaya dijawab dengan benar."
 )
+
+# Pesan per jenis kegagalan penyedia. Yang dilihat karyawan harus jujur tanpa
+# membocorkan detail teknis; kategori eskalasi yang membedakannya untuk HRD.
+PESAN_GALAT = {
+    "rate_limited": (
+        "Maaf, aku sedang menerima banyak pertanyaan sekaligus. Coba kirim lagi "
+        "sebentar lagi ya.{jeda}"
+    ),
+    "auth": (
+        "Maaf, ada masalah konfigurasi di sistemku sehingga aku tidak bisa "
+        "menjawab sekarang. Ini sudah ditandai untuk tim teknis."
+    ),
+    "konteks_penuh": (
+        "Maaf, pertanyaan ini terlalu panjang untuk aku proses. Coba pecah jadi "
+        "pertanyaan yang lebih pendek."
+    ),
+    "model_tidak_ada": (
+        "Maaf, ada masalah konfigurasi di sistemku sehingga aku tidak bisa "
+        "menjawab sekarang. Ini sudah ditandai untuk tim teknis."
+    ),
+    "lain": (
+        "Maaf, sedang ada gangguan teknis di sistemku. Pertanyaanmu sudah aku "
+        "teruskan ke HRD."
+    ),
+}
+
+# Galat konfigurasi adalah masalah tim teknis, bukan HRD, jadi diberi urgensi
+# tinggi supaya cepat terlihat; batas laju adalah kondisi normal yang berlalu.
+URGENSI_GALAT = {
+    "rate_limited": "normal",
+    "auth": "tinggi",
+    "model_tidak_ada": "tinggi",
+    "konteks_penuh": "normal",
+    "lain": "tinggi",
+}
 
 
 @dataclass
@@ -92,6 +127,7 @@ class ChatService:
             self.corpus,
             answer_mode=self.settings.answer_mode,
             allow_sample=self.settings.allow_sample_docs_in_auto,
+            ambang_token=self.settings.ambang_token_korpus,
         )
         self._stable_block = build_stable_block(
             nama_bot=self.settings.nama_bot,
@@ -123,6 +159,38 @@ class ChatService:
             nama = berkas.strip()
             (sah if nama in dikenal else palsu).append(nama)
         return sorted(set(sah)), sorted(set(palsu))
+
+    def _galat_penyedia(
+        self,
+        session_id: str,
+        pertanyaan_log: str,
+        *,
+        kode: str,
+        retry_after_s: float | None = None,
+    ) -> JawabanChat:
+        """Catat kegagalan penyedia dan susun pesan yang sesuai jenisnya."""
+        s = self.settings
+        jeda = ""
+        if kode == "rate_limited" and retry_after_s:
+            jeda = f" Kira-kira {int(retry_after_s) + 1} detik lagi."
+        pesan = PESAN_GALAT.get(kode, PESAN_GALAT["lain"]).format(jeda=jeda)
+
+        # Batas laju bukan hal yang perlu dibawa ke HRD — ia berlalu sendiri.
+        if kode != "rate_limited":
+            pesan += f"\n\nKalau mendesak, hubungi {s.kontak_hrd}."
+
+        esc_id = self.db.add_escalation(
+            session_id, pertanyaan_log, f"galat_{kode}", URGENSI_GALAT.get(kode, "tinggi")
+        )
+        self.db.add_message(
+            session_id, "assistant", pesan, found_answer=False, provider="error"
+        )
+        return JawabanChat(
+            hasil=Hasil.DIESKALASI,
+            pesan_untuk_karyawan=pesan,
+            escalation_id=esc_id,
+            kategori_eskalasi=f"galat_{kode}",
+        )
 
     # ---------- alur utama ----------
 
@@ -189,24 +257,15 @@ class ChatService:
                 messages=riwayat,
                 max_output_tokens=s.max_output_tokens,
             )
+        except ProviderError as galat:
+            log.error("Penyedia gagal. kode=%s: %s", galat.kode, galat)
+            return self._galat_penyedia(
+                session_id, pertanyaan_log, kode=galat.kode,
+                retry_after_s=galat.retry_after_s,
+            )
         except Exception:
-            log.exception("Panggilan LLM gagal")
-            esc_id = self.db.add_escalation(
-                session_id, pertanyaan_log, "gangguan_teknis", "tinggi"
-            )
-            pesan = (
-                "Maaf, sedang ada gangguan teknis di sistemku. Pertanyaanmu sudah "
-                f"aku teruskan ke HRD. Kalau mendesak, hubungi {s.kontak_hrd}."
-            )
-            self.db.add_message(
-                session_id, "assistant", pesan, found_answer=False, provider="error"
-            )
-            return JawabanChat(
-                hasil=Hasil.DIESKALASI,
-                pesan_untuk_karyawan=pesan,
-                escalation_id=esc_id,
-                kategori_eskalasi="gangguan_teknis",
-            )
+            log.exception("Panggilan LLM gagal tanpa klasifikasi")
+            return self._galat_penyedia(session_id, pertanyaan_log, kode="lain")
 
         # 7. periksa hasil
         teks = resp.text.strip()

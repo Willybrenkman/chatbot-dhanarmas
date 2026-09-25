@@ -39,6 +39,7 @@ HEADING_RE = re.compile(r"^#{2,4}\s+(.+)$", re.MULTILINE)
 
 class MockProvider:
     name = "mock"
+    supports_cache = False
 
     def __init__(self, model: str = "mock-1") -> None:
         self.model = model
@@ -115,4 +116,5 @@ class MockProvider:
             output_tokens=len(teks) // 4,
             cached_tokens=0,
             latency_ms=int((time.perf_counter() - mulai) * 1000),
+            supports_cache=False,
         )

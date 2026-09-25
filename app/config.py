@@ -24,15 +24,23 @@ class Settings(BaseSettings):
     answer_mode: Literal["draft", "auto"] = "draft"
 
     # --- Penyedia LLM ---
-    # mock     = tanpa panggilan jaringan, untuk tes & demo offline
-    # anthropic = Claude API (rekomendasi untuk pilot)
-    # hermes   = endpoint OpenAI-compatible milik sendiri (vLLM), untuk on-prem
-    llm_provider: Literal["mock", "anthropic", "hermes"] = "mock"
+    # mock      = tanpa panggilan jaringan, untuk tes & demo offline
+    # anthropic = Claude API
+    # groq      = Groq (model terbuka, ada tier gratis) lewat OpenAI-compatible
+    # hermes    = endpoint OpenAI-compatible milik sendiri (vLLM), untuk on-prem
+    llm_provider: Literal["mock", "anthropic", "groq", "hermes"] = "mock"
 
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-5"
     # Chat tanya-jawab tidak butuh penalaran dalam; effort rendah lebih murah & cepat.
     anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+
+    # Groq — kunci gratis di https://console.groq.com/keys
+    # Nama model Groq berubah dan yang lama dihentikan; verifikasi dengan
+    # `python3 scripts/cek_provider.py --daftar-model` sebelum menetapkannya.
+    groq_api_key: str | None = None
+    groq_model: str = "llama-3.3-70b-versatile"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
 
     hermes_base_url: str = "http://localhost:8000/v1"
     hermes_model: str = "NousResearch/Hermes-3-Llama-3.1-8B"
@@ -49,6 +57,14 @@ class Settings(BaseSettings):
 
     # --- Dokumen kebijakan ---
     knowledge_dir: Path = BASE_DIR / "knowledge"
+    # Ambang peringatan ukuran korpus, dalam token perkiraan. Harus disesuaikan
+    # dengan context window model yang dipakai, dengan sisa ruang untuk riwayat
+    # percakapan dan jawaban:
+    #   Claude (1 juta token)            -> 400_000 aman
+    #   Llama 3.3 70B di Groq (128rb)    -> 60_000
+    #   model 8B (8rb-32rb)              -> 6_000
+    # Melewati ambang ini berarti saatnya pindah dari full-context ke RAG.
+    ambang_token_korpus: int = 400_000
     # Pengaman: menolak jalan di mode auto kalau korpus masih berisi dokumen contoh.
     allow_sample_docs_in_auto: bool = False
 

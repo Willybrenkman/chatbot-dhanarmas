@@ -7,7 +7,7 @@ import pytest
 from app.chat import ChatService, Hasil
 from app.config import Settings
 from app.db import Database
-from app.providers.base import LLMResponse
+from app.providers.base import LLMResponse, ProviderError
 
 KNOWLEDGE = Path(__file__).resolve().parent.parent / "knowledge"
 
@@ -17,6 +17,7 @@ class ProviderPalsu:
 
     name = "palsu"
     model = "palsu-1"
+    supports_cache = True
 
     def __init__(self, teks: str) -> None:
         self.teks = teks
@@ -35,11 +36,29 @@ class ProviderPalsu:
 
 
 class ProviderMeledak:
+    """Gagal dengan pengecualian tak terklasifikasi."""
+
     name = "meledak"
     model = "-"
+    supports_cache = False
 
     async def complete(self, **_):
         raise RuntimeError("endpoint mati")
+
+
+class ProviderGagalTerklasifikasi:
+    """Gagal dengan ProviderError, seperti Groq saat kena batas laju."""
+
+    name = "groq"
+    model = "llama-3.3-70b-versatile"
+    supports_cache = False
+
+    def __init__(self, kode: str, retry_after_s: float | None = None) -> None:
+        self.kode = kode
+        self.retry_after_s = retry_after_s
+
+    async def complete(self, **_):
+        raise ProviderError(self.kode, f"uji {self.kode}", retry_after_s=self.retry_after_s)
 
 
 def buat(tmp_path, teks, *, answer_mode="draft", allow_sample=True):
@@ -128,10 +147,49 @@ async def test_topik_terlarang_tidak_memanggil_llm(tmp_path):
 
 @pytest.mark.asyncio
 async def test_llm_gagal_jadi_eskalasi_bukan_error(tmp_path):
+    """Pengecualian tak terduga pun harus jadi eskalasi, bukan 500."""
     svc, _ = buat(tmp_path, ProviderMeledak())
     h = await svc.handle_turn(session_id="s1", pertanyaan="Cuti berapa hari?")
     assert h.hasil is Hasil.DIESKALASI
-    assert h.kategori_eskalasi == "gangguan_teknis"
+    assert h.kategori_eskalasi == "galat_lain"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kode,urgensi",
+    [
+        ("rate_limited", "normal"),
+        ("auth", "tinggi"),
+        ("model_tidak_ada", "tinggi"),
+        ("konteks_penuh", "normal"),
+        ("lain", "tinggi"),
+    ],
+)
+async def test_galat_penyedia_dipetakan_per_jenis(tmp_path, kode, urgensi):
+    svc, _ = buat(tmp_path, ProviderGagalTerklasifikasi(kode))
+    h = await svc.handle_turn(session_id="s1", pertanyaan="Cuti berapa hari?")
+    assert h.hasil is Hasil.DIESKALASI
+    assert h.kategori_eskalasi == f"galat_{kode}"
+    esc = svc.db.list_escalations()
+    assert esc[0]["urgency"] == urgensi
+
+
+@pytest.mark.asyncio
+async def test_batas_laju_tidak_mengarahkan_ke_hrd(tmp_path):
+    """Batas laju berlalu sendiri; menyuruh karyawan menelepon HRD cuma bikin beban."""
+    svc, _ = buat(tmp_path, ProviderGagalTerklasifikasi("rate_limited", retry_after_s=7.5))
+    h = await svc.handle_turn(session_id="s1", pertanyaan="Cuti berapa hari?")
+    assert "hubungi" not in h.pesan_untuk_karyawan.lower()
+    assert "8 detik" in h.pesan_untuk_karyawan
+
+
+@pytest.mark.asyncio
+async def test_galat_konfigurasi_mengarahkan_ke_hrd(tmp_path):
+    svc, _ = buat(tmp_path, ProviderGagalTerklasifikasi("auth"))
+    h = await svc.handle_turn(session_id="s1", pertanyaan="Cuti berapa hari?")
+    assert "hubungi" in h.pesan_untuk_karyawan.lower()
+    # Jangan bocorkan detail teknis ke karyawan.
+    assert "api" not in h.pesan_untuk_karyawan.lower()
 
 
 @pytest.mark.asyncio

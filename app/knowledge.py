@@ -21,7 +21,8 @@ from pathlib import Path
 
 FRONT_MATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
-# Batas aman: kalau korpus melewati ini, saatnya pindah ke RAG.
+# Bawaan untuk model ber-context besar. Pemanggil sebaiknya mengoper ambang
+# yang sesuai context window model yang dipakai (lihat Settings.ambang_token_korpus).
 AMBANG_PERINGATAN_TOKEN = 400_000
 # Perkiraan kasar token untuk Bahasa Indonesia (~3.5 karakter per token).
 KARAKTER_PER_TOKEN = 3.5
@@ -116,7 +117,13 @@ def load_corpus(knowledge_dir: Path) -> Corpus:
     return corpus
 
 
-def periksa_korpus(corpus: Corpus, *, answer_mode: str, allow_sample: bool) -> list[str]:
+def periksa_korpus(
+    corpus: Corpus,
+    *,
+    answer_mode: str,
+    allow_sample: bool,
+    ambang_token: int = AMBANG_PERINGATAN_TOKEN,
+) -> list[str]:
     """Kembalikan daftar masalah. Kosong = korpus layak dipakai.
 
     Pengaman utama: dokumen contoh TIDAK BOLEH dipakai di mode auto,
@@ -144,10 +151,11 @@ def periksa_korpus(corpus: Corpus, *, answer_mode: str, allow_sample: bool) -> l
             + ", ".join(tanpa_tanggal)
         )
 
-    if corpus.perkiraan_token > AMBANG_PERINGATAN_TOKEN:
+    if corpus.perkiraan_token > ambang_token:
         masalah.append(
             f"Korpus ~{corpus.perkiraan_token:,} token, melewati ambang "
-            f"{AMBANG_PERINGATAN_TOKEN:,}. Saatnya pindah dari full-context ke RAG "
-            "(lihat README bagian 'Kapan pindah ke RAG')."
+            f"{ambang_token:,}. Ambang ini harus sesuai context window model yang "
+            "dipakai; kalau sudah terlampaui, saatnya pindah dari full-context ke "
+            "RAG (lihat README bagian 'Kapan pindah ke RAG')."
         )
     return masalah

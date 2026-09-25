@@ -34,6 +34,7 @@ PESAN_DITOLAK = (
 
 class AnthropicProvider:
     name = "anthropic"
+    supports_cache = True
 
     def __init__(
         self,
@@ -109,4 +110,5 @@ class AnthropicProvider:
             output_tokens=getattr(usage, "output_tokens", 0) or 0,
             cached_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
             latency_ms=latency,
+            supports_cache=True,
         )
