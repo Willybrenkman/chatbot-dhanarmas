@@ -43,11 +43,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 ## Uji
 
 ```bash
-python3 -m pytest -q              # 89 tes
-python3 eval/run_eval.py          # eval set
-LLM_PROVIDER=anthropic python3 eval/run_eval.py --ambang 85
+python3 -m pytest -q              # 89 tes, tanpa jaringan
 bash scripts/smoke.sh             # verifikasi menyeluruh
 python3 scripts/cek_provider.py   # cek kunci API & nama model penyedia
+python3 eval/run_eval.py          # eval set (mock: hanya pagar pengaman)
+LLM_PROVIDER=groq python3 eval/run_eval.py --ambang 85
 ```
 
 ## Arsitektur
@@ -233,12 +233,20 @@ antarmuka di `app/providers/base.py`, jadi tidak ada kode lain yang berubah.
 | `LLM_PROVIDER` | Untuk apa | Prompt caching |
 |---|---|---|
 | `mock` | uji & demo offline, tanpa API key | — |
-| `groq` | **paling murah untuk mulai** — model terbuka, ada tier gratis | tidak ada |
-| `anthropic` | kualitas kepatuhan instruksi tertinggi | ada, ttl 1 jam |
+| `groq` | **pilihan proyek ini** — model terbuka, ada tier gratis | tidak ada |
+| `anthropic` | opsional, kalau kepatuhan sitasi perlu lebih tinggi | ada, ttl 1 jam |
 | `hermes` | model self-hosted (vLLM), saat data tidak boleh keluar | prefix caching vLLM |
 
 `groq` dan `hermes` memakai kelas yang sama (`app/providers/openai_compatible.py`)
 karena bentuk API-nya identik — yang beda cuma base URL, nama model, dan kunci.
+
+Bawaan yang di-commit tetap `mock`, supaya klon baru bisa jalan tanpa kunci apa
+pun. Ganti ke `groq` di `.env` lokal kamu (yang tidak ikut ter-commit).
+
+**Kalau dijalankan di sesi cloud dan panggilan gagal dengan 403 di tahap CONNECT:**
+itu kebijakan jaringan environment yang menolak `api.groq.com`, bukan kunci atau
+kode yang salah. Izinkan host itu di setelan Network access environment tersebut,
+atau jalankan di mesin sendiri.
 
 ### Groq (tier gratis)
 
