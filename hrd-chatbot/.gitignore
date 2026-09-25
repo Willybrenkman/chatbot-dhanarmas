@@ -1,0 +1,11 @@
+.env
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+onboarding/karyawan_baru.csv

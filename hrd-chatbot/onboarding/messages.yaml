@@ -1,0 +1,109 @@
+# Enam pesan onboarding terjadwal untuk karyawan baru.
+#
+# offset_hari dihitung dari tanggal_mulai:
+#   -3 = tiga hari SEBELUM masuk kerja
+#    0 = hari pertama
+#   30 = hari ke-30
+#
+# Penempatan {placeholder} diisi dari data enrollment.
+# Placeholder yang tersedia: {nama}, {divisi}, {tanggal_mulai}, {kontak_hrd}
+#
+# ATURAN: enam pesan dalam 90 hari. Jangan tambah lagi tanpa alasan kuat —
+# ini bantuan, bukan spam. Karyawan baru sudah kewalahan di minggu pertama.
+
+- step_id: h_minus_3
+  offset_hari: -3
+  kanal: whatsapp
+  # Template WhatsApp WAJIB disetujui Meta lebih dulu. Siapkan 1-2 minggu.
+  template: onboarding_h_minus_3
+  judul: "Selamat datang & persiapan hari pertama"
+  isi: |
+    Hai {nama}, selamat datang di PT Dhanarmas!
+
+    Hari pertamamu {tanggal_mulai}. Yang perlu disiapkan:
+    - KTP asli + 2 fotokopi
+    - Kartu Keluarga (fotokopi)
+    - NPWP bila sudah ada
+    - Buku rekening atas nama sendiri
+    - Ijazah & transkrip (fotokopi legalisir)
+    - Foto 3x4 latar biru, 4 lembar
+    - Surat keterangan sehat
+
+    Datang pukul 08.00 ke lobi Gedung A, lapor ke resepsionis.
+    Ada yang mau ditanyakan? Balas pesan ini kapan saja.
+
+- step_id: hari_1
+  offset_hari: 0
+  kanal: whatsapp
+  template: onboarding_hari_1
+  judul: "Hari pertama — kenalan dengan asisten HRD"
+  isi: |
+    Selamat bergabung, {nama}!
+
+    Kalau ada yang mau ditanyakan soal cuti, absensi, BPJS, fasilitas kantor,
+    atau apa pun soal kepegawaian — balas saja pesan ini. Aku asisten HRD dan
+    bisa menjawab kapan saja, tidak perlu sungkan bertanya hal sekecil apa pun.
+
+    Untuk hal yang lebih pribadi, kamu tetap bisa menghubungi {kontak_hrd}.
+
+- step_id: hari_3
+  offset_hari: 3
+  kanal: whatsapp
+  template: onboarding_hari_3
+  judul: "Checklist hari ke-3"
+  isi: |
+    Hai {nama}, sudah hari ketiga. Cek sebentar ya:
+
+    - Email kantor sudah aktif?
+    - Sudah bisa absen di mesin fingerprint?
+    - ID card sudah diterima?
+    - Seragam/APD sudah lengkap (kalau unitmu memerlukan)?
+
+    Kalau ada yang belum, balas pesan ini — aku bantu arahkan.
+    Sesuai aturan, kalau pada hari ke-4 akses belum aktif harap lapor ke HRD.
+
+- step_id: minggu_2
+  offset_hari: 14
+  kanal: whatsapp
+  template: onboarding_minggu_2
+  judul: "Info yang biasanya ditanyakan di minggu kedua"
+  isi: |
+    Hai {nama}, beberapa hal yang biasanya mulai ditanyakan sekarang:
+
+    - Kartu BPJS Kesehatan umumnya aktif 14 hari kerja setelah pendaftaran
+    - Biaya berobat sebelum kartu aktif bisa diajukan sebagai penggantian
+    - Kalender cuti bersama tahun ini sudah diumumkan HRD
+
+    Mau detail salah satunya? Balas saja pesan ini.
+
+- step_id: hari_30
+  offset_hari: 30
+  kanal: whatsapp
+  template: onboarding_hari_30
+  judul: "Pulse check hari ke-30"
+  # Jawaban pesan ini ditandai untuk ditinjau HRD. Keluhan soal atasan atau
+  # rekan kerja HARUS masuk jalur manusia yang rahasia, bukan log bot biasa.
+  isi: |
+    Hai {nama}, sudah sebulan di {divisi}. Boleh cerita sebentar?
+
+    1. Ada kendala yang belum terselesaikan?
+    2. Sudah cukup paham tugas dan siapa yang dituju kalau butuh bantuan?
+    3. Ada yang perlu HRD bantu siapkan?
+
+    Jawaban kamu dipakai untuk membantu, BUKAN untuk menilai kinerja atau
+    masa percobaan. Jawab apa adanya saja — atau lewati kalau sedang sibuk.
+
+- step_id: hari_60
+  offset_hari: 60
+  kanal: whatsapp
+  template: onboarding_hari_60
+  judul: "Pengingat masa percobaan (karyawan + atasan)"
+  # Dikirim ke karyawan DAN atasannya (lihat atasan_phone di enrollment).
+  kirim_ke_atasan: true
+  isi: |
+    Hai {nama}, masa percobaanmu berakhir sekitar 30 hari lagi.
+
+    Evaluasi bulan ke-3 akan dilakukan oleh atasan langsungmu. Kalau ada hal
+    yang ingin kamu siapkan atau bicarakan lebih dulu, hubungi {kontak_hrd}.
+
+    Catatan: pengingat yang sama juga dikirim ke atasanmu.

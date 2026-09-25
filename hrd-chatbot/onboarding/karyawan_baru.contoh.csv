@@ -1,0 +1,6 @@
+employee_ref,nama,phone,email,divisi,status_kerja,tanggal_mulai,atasan_phone
+DHN-2026-0411,Budi Santoso,628110000001,budi.santoso@contoh.co.id,Produksi,tetap,2026-09-28,628110000010
+DHN-2026-0412,Siti Nurhaliza,628110000002,siti.n@contoh.co.id,Finance,pkwt,2026-09-25,628110000011
+DHN-2026-0413,Agus Pratama,628110000003,,Gudang,harian,2026-08-26,628110000012
+DHN-2026-0414,Dewi Lestari,628110000004,dewi.l@contoh.co.id,IT,tetap,2026-07-27,628110000013
+DHN-2026-0415,Rudi Hartono,,,Keamanan,outsourcing,2026-09-22,
