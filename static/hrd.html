@@ -9,12 +9,16 @@
     --bg:#f5f6f8; --card:#fff; --tx:#1b1d22; --dim:#6b7280; --line:#e3e5ea;
     --ok:#1a7f37; --no:#b42318; --pri:#1f6feb; --code:#f2f3f6;
     --k:#fde8e6; --k-tx:#8a1c12; --t:#fff4e5; --t-tx:#7a4a06; --n:#eef0f4; --n-tx:#44484f;
+    --ok-bg:#e7f6ec; --ok-tx:#14682d; --f-kritis:#b42318; --f-tinggi:#b7791f;
+    --f-normal:#8b919c; --f-ok:#1a7f37;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg:#14161a; --card:#1c1f25; --tx:#e8eaed; --dim:#9aa2ad; --line:#2c3037;
       --code:#24272e; --k:#3a1714; --k-tx:#f5a99f; --t:#332507; --t-tx:#f0c987;
       --n:#262a31; --n-tx:#c2c7ce;
+      --ok-bg:#15301e; --ok-tx:#6ed58c; --f-kritis:#e8675a; --f-tinggi:#dda93a;
+      --f-normal:#79808c; --f-ok:#3fae63;
     }
   }
   *{box-sizing:border-box}
@@ -57,6 +61,33 @@
   .kpi .n{font-size:25px;font-weight:700} .kpi .l{font-size:12px;color:var(--dim)}
   .empty{color:var(--dim);padding:26px;text-align:center}
   pre{background:var(--code);padding:12px;border-radius:9px;overflow:auto;font-size:12.5px}
+  .kpi .h{font-size:11.5px;color:var(--dim);margin-top:4px}
+  .sect{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--dim);margin:0 0 12px}
+  .bars{display:flex;flex-direction:column;gap:13px}
+  .bar-row{display:grid;grid-template-columns:1fr auto;gap:5px 10px;align-items:center}
+  .bar-name{font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .bar-n{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+  .bar-track{grid-column:1/-1;height:7px;border-radius:5px;background:var(--code);overflow:hidden}
+  .bar-fill{height:100%;border-radius:5px}
+  .f-kritis{background:var(--f-kritis)} .f-tinggi{background:var(--f-tinggi)}
+  .f-normal{background:var(--f-normal)} .f-ok{background:var(--f-ok)} .f-no{background:var(--f-kritis)}
+  .pill.ok{background:var(--ok-bg);color:var(--ok-tx)}
+  .pill.no{background:var(--k);color:var(--k-tx)}
+  .banner{border-radius:9px;padding:12px 14px;font-size:13.5px;line-height:1.5}
+  .banner.ok{background:var(--ok-bg);color:var(--ok-tx)}
+  .banner.warn{background:var(--t);color:var(--t-tx)}
+  .banner.no{background:var(--k);color:var(--k-tx)}
+  .banner code{background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .hint{font-size:12.5px;color:var(--dim);margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .hint code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:12px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .chip{font-size:12.5px;padding:4px 10px;border-radius:7px;background:var(--code);
+    border:1px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .tok{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:9px}
+  .tok>div{background:var(--code);border-radius:9px;padding:11px 13px}
+  .tok .tn{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+  .tok .tl{font-size:11.5px;color:var(--dim);margin-top:2px}
 </style>
 </head>
 <body>
@@ -115,11 +146,30 @@ async function muat() {
   try {
     if (tab === 'drafts') return renderDrafts(await api('/api/hrd/drafts'));
     if (tab === 'esc')    return renderEsc(await api('/api/hrd/escalations'));
-    if (tab === 'stats')  return renderStats(await api('/api/hrd/stats'));
+    if (tab === 'stats')  return renderStats(await api('/api/hrd/stats'), await (await fetch('/healthz')).json());
     if (tab === 'korpus') return renderKorpus(await (await fetch('/healthz')).json());
   } catch (e) {
     view.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
   }
+}
+
+// Waktu dari server berformat ISO UTC. Yang dibutuhkan HRD bukan stempel
+// waktunya, tapi "sudah berapa lama menunggu" — itu yang menentukan urutan
+// kerja. Stempel lengkapnya tetap ada di tooltip.
+function waktu(iso) {
+  const t = new Date(iso);
+  if (isNaN(t)) return { teks: String(iso || ''), penuh: String(iso || ''), jam: 0 };
+  const menit = Math.max(0, Math.round((Date.now() - t.getTime()) / 60000));
+  const jam = menit / 60;
+  let teks;
+  if (menit < 1)        teks = 'baru saja';
+  else if (menit < 60)  teks = menit + ' menit lalu';
+  else if (jam < 24)    teks = Math.round(jam) + ' jam lalu';
+  else                  teks = Math.round(jam / 24) + ' hari lalu';
+  const penuh = t.toLocaleString('id-ID', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  return { teks, penuh, jam };
 }
 
 function renderDrafts(d) {
@@ -128,7 +178,11 @@ function renderDrafts(d) {
     view.innerHTML = '<div class="empty">Tidak ada draf yang menunggu. 👍</div>';
     return;
   }
-  view.innerHTML = list.map(x => `
+  view.innerHTML = `<div class="sect" style="margin:2px 0 12px">
+      ${num(list.length)} draf menunggu &middot; yang paling lama menunggu di atas
+    </div>` + list.map(x => {
+    const w = waktu(x.created_at);
+    return `
     <div class="card" data-id="${x.id}">
       <div class="q">${esc(x.question)}</div>
       <div class="a">${esc(x.draft_answer)}</div>
@@ -136,9 +190,10 @@ function renderDrafts(d) {
       <div class="row">
         <button class="ok" data-act="approve" data-id="${x.id}">Setujui &amp; kirim</button>
         <button class="no" data-act="reject" data-id="${x.id}">Tolak</button>
-        <span class="meta">draf #${x.id} · ${esc(x.created_at)}</span>
+        <span class="meta">draf #${x.id} &middot; <span title="${esc(w.penuh)}">${esc(w.teks)}</span></span>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderEsc(d) {
@@ -147,56 +202,171 @@ function renderEsc(d) {
     view.innerHTML = '<div class="empty">Tidak ada eskalasi terbuka.</div>';
     return;
   }
-  view.innerHTML = list.map(x => `
+  const kritis = list.filter(x => x.urgency === 'kritis').length;
+  const kepala = kritis
+    ? `<div class="banner no" style="margin-bottom:13px"><b>${num(kritis)} eskalasi kritis menunggu.</b>
+       Isyarat menyakiti diri dan pelecehan ditangani hari itu juga, tidak masuk antrean biasa.</div>`
+    : `<div class="sect" style="margin:2px 0 12px">
+       ${num(list.length)} eskalasi terbuka &middot; urut dari yang paling mendesak</div>`;
+
+  view.innerHTML = kepala + list.map(x => {
+    const w = waktu(x.created_at);
+    // Lewat sehari untuk urusan kritis/tinggi sudah bukan antrean lagi.
+    const telat = w.jam >= 24 && x.urgency !== 'normal';
+    return `
     <div class="card">
-      <div><span class="pill ${esc(x.urgency)}">${esc(x.urgency)}</span>
-           <span class="meta">${esc(x.category)}</span></div>
+      <div class="bar-name">
+        <span class="pill ${esc(x.urgency)}">${esc(x.urgency)}</span>
+        <strong>${esc(metaKat(x.category).l)}</strong>
+        <span class="meta" style="margin:0">${esc(x.category)}</span>
+      </div>
       <div class="q" style="margin-top:9px">${esc(x.question)}</div>
+      ${telat ? `<div class="banner warn" style="margin-top:10px">Terbuka ${esc(w.teks)} dan belum ditangani.</div>` : ''}
       <div class="row">
         <input type="text" data-note="${x.id}" placeholder="Catatan penanganan" style="flex:1;min-width:180px">
         <button data-act="handle" data-id="${x.id}">Tandai ditangani</button>
-        <span class="meta">#${x.id} · ${esc(x.created_at)}</span>
+        <span class="meta">#${x.id} &middot; <span title="${esc(w.penuh)}">${esc(w.teks)}</span></span>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-function renderStats(s) {
-  const kpi = (n, l) => `<div class="kpi"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`;
+// Kategori eskalasi: label manusiawi + urgensi, disamakan dengan 9 topik di
+// app/guardrails.py dan URGENSI_GALAT di app/chat.py.
+const KAT = {
+  krisis:                { l: 'Krisis / isyarat menyakiti diri', u: 'kritis' },
+  pelecehan_kekerasan:   { l: 'Pelecehan & kekerasan',           u: 'kritis' },
+  phk_pesangon:          { l: 'PHK & pesangon',                  u: 'tinggi' },
+  sanksi_disiplin:       { l: 'Sanksi disiplin',                 u: 'tinggi' },
+  sengketa_hukum:        { l: 'Sengketa hukum',                  u: 'tinggi' },
+  whistleblowing:        { l: 'Whistleblowing',                  u: 'tinggi' },
+  data_orang_lain:       { l: 'Data karyawan lain',              u: 'normal' },
+  konflik_personal:      { l: 'Konflik personal',                u: 'normal' },
+  negosiasi_karier:      { l: 'Negosiasi karier',                u: 'normal' },
+  tidak_ditemukan:       { l: 'Tidak ada di dokumen',            u: 'normal' },
+  galat_rate_limited:    { l: 'Batas laju penyedia',             u: 'normal' },
+  galat_auth:            { l: 'Kunci API bermasalah',            u: 'tinggi' },
+  galat_model_tidak_ada: { l: 'Model tidak tersedia',            u: 'tinggi' },
+  galat_konteks_penuh:   { l: 'Prompt melebihi context',         u: 'normal' },
+  galat_lain:            { l: 'Gangguan penyedia',               u: 'tinggi' },
+};
+const STATUS_DRAF = {
+  pending:  { l: 'Menunggu tinjauan', u: 'tinggi' },
+  approved: { l: 'Disetujui',         u: 'ok' },
+  rejected: { l: 'Ditolak',           u: 'no' },
+};
+
+function num(n) { return Number(n || 0).toLocaleString('id-ID'); }
+function judulKode(k) {
+  return String(k).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+}
+function metaKat(k)    { return KAT[k]         || { l: judulKode(k), u: 'normal' }; }
+function metaStatus(k) { return STATUS_DRAF[k] || { l: judulKode(k), u: 'normal' }; }
+
+// Batang proporsional: yang terbanyak jadi 100%, sisanya relatif terhadap itu.
+function bars(obj, meta) {
+  const ent = Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+  if (!ent.length) return '';
+  const max = Math.max(...ent.map(e => e[1]));
+  return '<div class="bars">' + ent.map(([k, v]) => {
+    const m = meta(k);
+    const lebar = Math.max(3, Math.round(v / max * 100));
+    return `<div class="bar-row">
+        <div class="bar-name"><span class="pill ${m.u}">${esc(m.u)}</span>${esc(m.l)}</div>
+        <div class="bar-n">${num(v)}</div>
+        <div class="bar-track"><div class="bar-fill f-${m.u}" style="width:${lebar}%"></div></div>
+      </div>`;
+  }).join('') + '</div>';
+}
+
+function kpi(n, l, h) {
+  return `<div class="kpi"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div>`
+       + (h ? `<div class="h">${esc(h)}</div>` : '') + '</div>';
+}
+
+function renderStats(s, h) {
+  const totalEsk = Object.values(s.eskalasi_per_kategori || {}).reduce((a, b) => a + b, 0);
+  const menunggu = (s.draf_per_status || {}).pending || 0;
+  const tok = s.token || {};
+  // Hanya Anthropic yang melaporkan cache_read. Di penyedia lain nol itu wajar,
+  // jadi peringatannya jangan ditampilkan — itu cuma derau.
+  const punyaCache = h && h.provider === 'anthropic';
+  const catatanCache = !punyaCache
+    ? `<div class="hint">Penyedia <code>${esc(h ? h.provider : '?')}</code> tidak punya prompt caching, jadi
+       <code>cache_read</code> nol itu wajar. Korpus dibaca ulang seharga penuh setiap turn.</div>`
+    : (tok.cache_read > 0
+        ? `<div class="banner ok"><b>Cache kena.</b> Korpus kebijakan dibaca dari cache, tidak dihitung ulang tiap turn.</div>`
+        : `<div class="banner warn"><b>Cache tidak pernah kena.</b> Ada yang membatalkan prompt cache &mdash;
+           biasanya timestamp atau ID yang ikut masuk prefiks prompt. Cek urutan blok di <code>app/prompts.py</code>.</div>`);
+
   view.innerHTML = `
     <div class="grid">
-      ${kpi(s.total_pertanyaan, 'Pertanyaan masuk')}
-      ${kpi(s.persen_terjawab + '%', 'Terjawab bot')}
-      ${kpi(s.tidak_ditemukan, 'Tidak ditemukan')}
-      ${kpi(s.total_sesi, 'Sesi percakapan')}
+      ${kpi(num(s.total_pertanyaan), 'Pertanyaan masuk', num(s.total_sesi) + ' sesi percakapan')}
+      ${kpi(s.persen_terjawab + '%', 'Terjawab bot', num(s.terjawab) + ' dari ' + num(s.total_pertanyaan))}
+      ${kpi(num(s.tidak_ditemukan), 'Tidak dijawab bot', 'diblokir, dieskalasi, atau tidak ada di dokumen')}
+      ${kpi(num(menunggu), 'Draf menunggu', menunggu ? 'perlu ditinjau' : 'semua bersih')}
     </div>
+
     <div class="card" style="margin-top:14px">
-      <strong>Eskalasi per kategori</strong>
-      <pre>${esc(JSON.stringify(s.eskalasi_per_kategori, null, 2))}</pre>
-      <strong>Draf per status</strong>
-      <pre>${esc(JSON.stringify(s.draf_per_status, null, 2))}</pre>
-      <strong>Token terpakai</strong>
-      <pre>${esc(JSON.stringify(s.token, null, 2))}</pre>
-      <div class="meta">Kalau <code>cache_read</code> selalu 0, ada yang membatalkan prompt cache —
-      cek apakah ada timestamp atau ID yang ikut di prefiks prompt.</div>
+      <div class="sect">Eskalasi per kategori &middot; ${num(totalEsk)} total</div>
+      ${totalEsk
+        ? bars(s.eskalasi_per_kategori, metaKat)
+        : '<div class="banner ok"><b>Belum ada eskalasi.</b> Belum ada pertanyaan yang kena pagar pengaman atau gagal dijawab.</div>'}
+      <div class="hint">Kategori <span class="pill kritis">kritis</span> harus ditangani hari itu juga &mdash;
+      isyarat menyakiti diri dan pelecehan tidak menunggu antrean.</div>
+    </div>
+
+    <div class="card">
+      <div class="sect">Draf per status</div>
+      ${Object.keys(s.draf_per_status || {}).length
+        ? bars(s.draf_per_status, metaStatus)
+        : '<div class="banner ok"><b>Belum ada draf.</b></div>'}
+      <div class="hint">Draf yang <b>ditolak</b> adalah bahan perbaikan paling berharga &mdash;
+      alasan penolakan menunjukkan dokumen mana yang kurang jelas.</div>
+    </div>
+
+    <div class="card">
+      <div class="sect">Token terpakai</div>
+      <div class="tok">
+        <div><div class="tn">${num(tok.input)}</div><div class="tl">Input</div></div>
+        <div><div class="tn">${num(tok.output)}</div><div class="tl">Output</div></div>
+        <div><div class="tn">${num(tok.cache_read)}</div><div class="tl">Dibaca dari cache</div></div>
+      </div>
+      ${catatanCache}
     </div>`;
 }
 
 function renderKorpus(h) {
+  const contoh = h.dokumen_contoh || [];
+  const masalah = h.masalah_korpus || [];
   view.innerHTML = `
     <div class="grid">
-      <div class="kpi"><div class="n">${esc(h.dokumen)}</div><div class="l">Dokumen dimuat</div></div>
-      <div class="kpi"><div class="n">${esc(h.perkiraan_token_korpus)}</div><div class="l">Perkiraan token</div></div>
-      <div class="kpi"><div class="n">${esc(h.answer_mode)}</div><div class="l">Mode jawaban</div></div>
-      <div class="kpi"><div class="n">${esc(h.provider)}</div><div class="l">Penyedia LLM</div></div>
+      ${kpi(num(h.dokumen), 'Dokumen dimuat', 'dari folder knowledge/')}
+      ${kpi(num(h.perkiraan_token_korpus), 'Perkiraan token', 'dikirim setiap turn')}
+      ${kpi(h.answer_mode, 'Mode jawaban', h.answer_mode === 'draft' ? 'HRD meninjau dulu' : 'langsung ke karyawan')}
+      ${kpi(h.provider, 'Penyedia LLM', h.model)}
     </div>
+
     <div class="card" style="margin-top:14px">
-      <strong>Dokumen contoh yang masih terpasang</strong>
-      <pre>${esc(JSON.stringify(h.dokumen_contoh, null, 2))}</pre>
-      <strong>Masalah korpus</strong>
-      <pre>${esc(JSON.stringify(h.masalah_korpus, null, 2))}</pre>
+      <div class="sect">Status dokumen</div>
+      ${contoh.length
+        ? `<div class="banner warn">
+             <div><b>${num(contoh.length)} dokumen masih contoh fiktif.</b> Selama masih ada berkas bertanda
+             <code>contoh: true</code>, mode <code>auto</code> ditolak dan semua jawaban tetap ditahan sebagai
+             draf &mdash; supaya aturan karangan tidak pernah terkirim ke karyawan sebagai aturan resmi.</div>
+           </div>
+           <div class="chips">${contoh.map(f => `<span class="chip">${esc(f)}</span>`).join('')}</div>`
+        : '<div class="banner ok"><b>Semua dokumen resmi.</b> Tidak ada lagi berkas bertanda <code>contoh: true</code>.</div>'}
+    </div>
+
+    <div class="card">
+      <div class="sect">Masalah korpus</div>
+      ${masalah.length
+        ? masalah.map(m => `<div class="banner no" style="margin-bottom:8px">${esc(m)}</div>`).join('')
+        : '<div class="banner ok"><b>Tidak ada masalah.</b> Front matter lengkap dan ukuran korpus masih di bawah ambang.</div>'}
       <div class="row">
         <button class="ghost" data-act="reload">Muat ulang dokumen</button>
-        <span class="meta">Pakai ini setelah memperbarui file di folder knowledge/.</span>
+        <span class="meta">Pakai ini setelah memperbarui file di folder knowledge/ &mdash; tanpa restart server.</span>
       </div>
     </div>`;
 }
