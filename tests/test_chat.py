@@ -244,3 +244,49 @@ async def test_reload_knowledge_tanpa_restart(tmp_path):
     sebelum = len(svc.corpus.documents)
     svc.reload_knowledge()
     assert len(svc.corpus.documents) == sebelum
+
+
+# --- Tipografi Unicode dari model terbuka ---------------------------------
+#
+# gpt-oss-120b lewat Groq menyisipkan narrow no-break space (U+202F) di antara
+# angka dan satuannya, dan sesekali tepat setelah kurung buka sitasi. Di layar
+# tidak ada bedanya dengan spasi biasa, tapi setiap pencocokan teks meleset.
+# Efeknya paling mahal di sitasi: jawaban yang sudah menyitasi dengan benar
+# dianggap tanpa sumber, lalu ditahan untuk ditinjau manusia tanpa alasan.
+
+JAWABAN_SPASI_ANEH = (
+    "Jam kerja 08.00 sampai 17.00, istirahat 12.00‑"
+    "13.00. [ sumber: 10-jam-kerja-dan-absensi.md § Pasal 1]"
+)
+
+
+def test_normalisasi_menyamakan_spasi_dan_hubung_unicode():
+    from app.chat import normalisasi_teks
+
+    hasil = normalisasi_teks(JAWABAN_SPASI_ANEH)
+    assert " " not in hasil
+    assert "‑" not in hasil
+    assert "08.00 sampai 17.00" in hasil
+    assert "12.00-13.00" in hasil
+
+
+def test_normalisasi_membiarkan_en_dash():
+    from app.chat import normalisasi_teks
+
+    assert normalisasi_teks("Senin – Jumat") == "Senin – Jumat"
+
+
+@pytest.mark.asyncio
+async def test_sitasi_tetap_terbaca_walau_model_pakai_spasi_unicode(tmp_path):
+    svc, _ = buat(tmp_path, JAWABAN_SPASI_ANEH)
+    hasil = await svc.handle_turn(session_id="s1", pertanyaan="Jam kerja kapan?")
+    assert hasil.sumber == ["10-jam-kerja-dan-absensi.md"]
+    assert hasil.hasil is Hasil.DITAHAN_DRAF
+
+
+@pytest.mark.asyncio
+async def test_teks_tersimpan_sudah_dinormalkan(tmp_path):
+    svc, _ = buat(tmp_path, JAWABAN_SPASI_ANEH)
+    await svc.handle_turn(session_id="s1", pertanyaan="Jam kerja kapan?")
+    jawaban = svc.db.recent_messages("s1", 10)[-1]["content"]
+    assert " " not in jawaban

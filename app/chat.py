@@ -36,7 +36,32 @@ from .providers import LLMProvider, ProviderError
 
 log = logging.getLogger(__name__)
 
-SITASI_RE = re.compile(r"\[sumber:\s*([^\]§]+?)\s*§\s*([^\]]+?)\]", re.IGNORECASE)
+SITASI_RE = re.compile(r"\[\s*sumber:\s*([^\]§]+?)\s*§\s*([^\]]+?)\]", re.IGNORECASE)
+
+# Model terbuka gemar memakai tipografi Unicode: narrow no-break space (U+202F)
+# di antara angka dan satuannya, non-breaking hyphen (U+2011) di rentang jam, dan
+# sesekali zero-width space. Di layar semuanya tidak bisa dibedakan dari spasi dan
+# tanda hubung biasa, tapi setiap pencocokan teks meleset — termasuk regex sitasi
+# di atas, sehingga jawaban yang SUDAH menyitasi dengan benar ditahan seolah-olah
+# tanpa sumber, dan eval melaporkannya sebagai kegagalan kualitas model.
+#
+# Dinormalkan sekali di sini, sebelum pemeriksaan apa pun dan sebelum disimpan,
+# supaya pipa, konsol HRD, dan eval melihat teks yang sama. En dash dan em dash
+# sengaja dibiarkan: itu tipografi sah yang tidak merusak pencocokan.
+_SPASI_ANEH = "\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"\
+               "\u2008\u2009\u200a\u202f\u205f\u3000"
+_LEBAR_NOL = "\u200b\u200c\u200d\ufeff"
+_HUBUNG_ANEH = "\u2011\u2012"
+
+_NORMALISASI = {ord(c): " " for c in _SPASI_ANEH}
+_NORMALISASI.update({ord(c): None for c in _LEBAR_NOL})
+_NORMALISASI.update({ord(c): "-" for c in _HUBUNG_ANEH})
+
+
+def normalisasi_teks(teks: str) -> str:
+    """Samakan spasi dan tanda hubung Unicode dengan padanan ASCII-nya."""
+    return teks.translate(_NORMALISASI)
+
 
 
 class Hasil(str, Enum):
@@ -268,7 +293,7 @@ class ChatService:
             return self._galat_penyedia(session_id, pertanyaan_log, kode="lain")
 
         # 7. periksa hasil
-        teks = resp.text.strip()
+        teks = normalisasi_teks(resp.text).strip()
         tidak_ditemukan = teks.upper().startswith(SENTINEL_TIDAK_DITEMUKAN)
         sitasi_sah, sitasi_palsu = self._periksa_sitasi(teks)
 
