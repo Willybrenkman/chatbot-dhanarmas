@@ -287,7 +287,9 @@ Tiga hal yang perlu kamu tahu dengan Groq:
 ### Cocokkan ambang korpus dengan context window model
 
 `AMBANG_TOKEN_KORPUS` di `.env` harus sesuai context window model yang dipakai,
-bukan dibiarkan di bawaan 400.000 yang hanya pas untuk model ber-context sejuta:
+bukan dibiarkan di bawaannya. Bawaan sekarang 60.000, pas untuk model ber-context
+128rb seperti pilihan Groq di atas; naikkan ke 400.000 kalau pindah ke model
+ber-context sejuta seperti Claude:
 
 ```bash
 python3 scripts/cek_provider.py --ukur-korpus
