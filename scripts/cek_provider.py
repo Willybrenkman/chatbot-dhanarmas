@@ -177,11 +177,11 @@ async def tanya_uji(s, pertanyaan: str) -> int:
                 "penuh setiap turn.", "dim"))
 
     # Pemeriksaan yang sama dengan yang dipakai pipa, supaya kepatuhan model terlihat.
-    from app.chat import SITASI  # noqa: PLC0415
+    from app.chat import SITASI_RE  # noqa: PLC0415
     from app.prompts import SENTINEL_TIDAK_DITEMUKAN  # noqa: PLC0415
 
     dikenal = set(corpus.filenames)
-    sitasi = [m[0].strip() for m in SITASI.findall(resp.text)]
+    sitasi = [m[0].strip() for m in SITASI_RE.findall(resp.text)]
     palsu = [c for c in sitasi if c not in dikenal]
 
     print()

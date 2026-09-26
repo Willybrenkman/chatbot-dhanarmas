@@ -101,6 +101,8 @@ async def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="tampilkan jawaban penuh")
     ap.add_argument("--paksa-nilai-semua", action="store_true",
                     help="nilai kasus isi jawaban walau provider tiruan (hasilnya tidak bermakna)")
+    ap.add_argument("--jeda", type=float, default=0.0, metavar="DETIK",
+                    help="jeda antar-kasus; perlu di tier gratis yang batas lajunya ketat")
     args = ap.parse_args()
 
     kasus_semua = yaml.safe_load(Path(args.set).read_text(encoding="utf-8"))
@@ -136,6 +138,8 @@ async def main() -> int:
             print(f"{i:3d}. {warna('LEWATI', 'dim')} {kasus['id']:14s} "
                   f"{kasus['pertanyaan'][:44]:44s} {warna('butuh provider nyata', 'dim')}")
             continue
+        if args.jeda and i > 1:
+            await asyncio.sleep(args.jeda)
         jawaban = await svc.handle_turn(
             session_id=f"eval-{kasus['id']}",
             pertanyaan=kasus["pertanyaan"],
