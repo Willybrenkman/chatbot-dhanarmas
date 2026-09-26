@@ -9,12 +9,14 @@
     --bg: #f5f6f8; --card: #ffffff; --tx: #1b1d22; --tx-dim: #6b7280;
     --line: #e3e5ea; --me: #1f6feb; --me-tx: #ffffff; --bot: #eef0f4;
     --warn-bg: #fff7e6; --warn-line: #f0c36d; --warn-tx: #6b4c07;
+    --esc-bg: #fdeceb; --esc-line: #f0b3ad; --esc-tx: #8a1c12;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #14161a; --card: #1c1f25; --tx: #e8eaed; --tx-dim: #9aa2ad;
       --line: #2c3037; --bot: #262a31;
       --warn-bg: #2e2510; --warn-line: #6b5518; --warn-tx: #f0d493;
+      --esc-bg: #331916; --esc-line: #6b2a24; --esc-tx: #f3a79d;
     }
   }
   * { box-sizing: border-box; }
@@ -50,6 +52,13 @@
     display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px;
     border: 1px solid var(--line); margin: 3px 4px 0 0;
   }
+  .status {
+    display: block; font-size: 11px; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px; margin-top: 9px;
+    width: max-content; max-width: 100%;
+  }
+  .status.tahan { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-tx); }
+  .status.esk { background: var(--esc-bg); border: 1px solid var(--esc-line); color: var(--esc-tx); }
   .disclaimer {
     font-size: 11.5px; background: var(--warn-bg); border: 1px solid var(--warn-line);
     color: var(--warn-tx); padding: 7px 10px; border-radius: 9px; margin-top: 8px;
@@ -123,7 +132,22 @@ function bubble(who, text) {
   return b;
 }
 
+// Apa yang terjadi pada pertanyaan ini. Teks jawabannya sudah menjelaskan,
+// tapi penanda visual membuat karyawan langsung tahu ini belum jawaban final
+// dan tidak perlu menunggu di depan layar.
+const STATUS = {
+  ditahan_draf: { kelas: 'tahan', teks: 'Menunggu ditinjau HRD' },
+  dieskalasi:   { kelas: 'esk',   teks: 'Diteruskan ke HRD' },
+};
+
 function tambahMeta(b, data) {
+  const st = STATUS[data.hasil];
+  if (st) {
+    const s = document.createElement('div');
+    s.className = 'status ' + st.kelas;
+    s.textContent = st.teks;
+    b.appendChild(s);
+  }
   if (data.sumber && data.sumber.length) {
     const m = document.createElement('div');
     m.className = 'meta';
@@ -144,11 +168,57 @@ function tambahMeta(b, data) {
   }
 }
 
+// Menonaktifkan tombol saja tidak cukup: menekan Enter di kolom teks tetap
+// mengirim form, jadi satu pertanyaan bisa terkirim berkali-kali sebelum yang
+// pertama selesai. Penjaganya harus di handler, bukan di tombol.
+// Riwayat percakapan disimpan di sessionStorage, bukan ditarik ulang dari server.
+// Alasannya: session_id sendiri hidup di sessionStorage. Kalau penyimpanan itu
+// hilang, id-nya ikut hilang dan riwayat di server tidak bisa dijangkau lagi —
+// jadi endpoint riwayat tidak menambah daya tahan apa pun, hanya menambah satu
+// jalur tanpa autentikasi yang menyajikan isi percakapan orang. Umur simpannya
+// sama persis, risikonya tidak.
+const KUNCI_RIWAYAT = 'riwayat';
+const MAKS_RIWAYAT = 40;
+
+let riwayat = [];
+try {
+  riwayat = JSON.parse(sessionStorage.getItem(KUNCI_RIWAYAT) || '[]');
+  if (!Array.isArray(riwayat)) riwayat = [];
+} catch (e) { riwayat = []; }
+
+function catat(who, text, data) {
+  riwayat.push(data ? { who, text, data } : { who, text });
+  if (riwayat.length > MAKS_RIWAYAT) riwayat = riwayat.slice(-MAKS_RIWAYAT);
+  try {
+    sessionStorage.setItem(KUNCI_RIWAYAT, JSON.stringify(riwayat));
+  } catch (e) {
+    // Kuota penuh, mode penyamaran, atau storage diblokir. Percakapan tetap
+    // jalan, cuma tidak bertahan saat refresh — ini tidak boleh menggagalkan
+    // pengiriman pertanyaan.
+  }
+}
+
+// Satu pintu untuk menampilkan jawaban: isi balon, tempel meta, lalu catat.
+// Supaya jalur sukses dan jalur galat tidak bisa lupa menyimpan.
+function jawab(b, text, data) {
+  b.textContent = text;
+  if (data) tambahMeta(b, data);
+  catat('bot', text, data);
+}
+
+// Menonaktifkan tombol saja tidak cukup: menekan Enter di kolom teks tetap
+// mengirim form, jadi satu pertanyaan bisa terkirim berkali-kali sebelum yang
+// pertama selesai. Penjaganya harus di handler, bukan di tombol.
+let sibuk = false;
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (sibuk) return;
   const pesan = input.value.trim();
   if (!pesan) return;
+  sibuk = true;
   bubble('me', pesan);
+  catat('me', pesan);
   input.value = '';
   send.disabled = true;
   const pending = bubble('bot', 'Sedang mencari di dokumen kebijakan…');
@@ -161,14 +231,27 @@ form.addEventListener('submit', async (e) => {
         session_id: sid, pesan, status_kerja: statusSel.value, channel: 'web'
       })
     });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // Server yang menjawab dengan galat bukan hal yang sama dengan server yang
+    // tidak terjangkau — pesannya jangan diseragamkan jadi "koneksi gagal".
+    if (r.status === 422) {
+      jawab(pending, 'Pertanyaannya terlalu panjang atau kosong. '
+        + 'Coba tulis ulang lebih pendek.');
+      return;
+    }
+    if (!r.ok) {
+      jawab(pending, 'Layanannya sedang bermasalah dan sudah tercatat di tim teknis. '
+        + 'Untuk yang mendesak, hubungi HRD langsung.');
+      return;
+    }
     const data = await r.json();
-    pending.textContent = data.pesan;
-    tambahMeta(pending, data);
+    jawab(pending, data.pesan, {
+      hasil: data.hasil, sumber: data.sumber, disclaimer: data.disclaimer,
+    });
   } catch (err) {
-    pending.textContent =
-      'Maaf, koneksi ke server gagal. Coba lagi sebentar, atau hubungi HRD langsung.';
+    jawab(pending, 'Maaf, koneksi ke server gagal. '
+      + 'Coba lagi sebentar, atau hubungi HRD langsung.');
   } finally {
+    sibuk = false;
     send.disabled = false;
     input.focus();
   }
@@ -178,6 +261,14 @@ bubble('bot',
   'Hai! Aku bisa membantu menjawab soal cuti, absensi, BPJS, fasilitas kantor, ' +
   'dan prosedur kepegawaian lainnya.\n\nUntuk hal yang menyangkut kasus pribadimu ' +
   '— sanksi, PHK, konflik kerja — aku akan langsung menghubungkanmu ke HRD.');
+
+// Tampilkan lagi percakapan sebelumnya. Tanpa ini, refresh terlihat seperti
+// kehilangan konteks padahal server masih mengingatnya, dan karyawan mengulang
+// pertanyaan yang sama.
+riwayat.forEach(r => {
+  const b = bubble(r.who, r.text);
+  if (r.data) tambahMeta(b, r.data);
+});
 </script>
 </body>
 </html>

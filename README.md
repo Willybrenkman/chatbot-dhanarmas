@@ -358,6 +358,11 @@ Ini MVP pilot. Yang **wajib** dibereskan sebelum dipakai luas:
   chat memberi peringatan agar tidak mengirim data pribadi.
 - Untuk pesan onboarding ke nomor pribadi (terutama pra-masuk H-3), siapkan
   dasar persetujuan — titipkan klausulnya di offer letter atau kontrak.
+- **Transkrip juga tersimpan di browser karyawan** (`sessionStorage`), supaya refresh
+  tidak terlihat seperti kehilangan percakapan. Umurnya sebatas tab itu — tutup tab,
+  hilang — dan tidak pernah dikirim ke mana pun. Di komputer bersama, ingatkan
+  karyawan menutup tabnya; itu sekaligus alasan riwayat TIDAK ditarik ulang dari
+  server, karena kalau begitu menutup tab tidak lagi cukup.
 - Tetapkan kebijakan retensi log percakapan. Belum ada di MVP ini.
 
 ## Struktur berkas
